@@ -12,83 +12,21 @@ essen.trajectory <- readRDS("data.Essen.trajectory.rds")
 head(essen.trajectory)
 str(essen.trajectory)
 
-# ----------- Exploration: Track length vs track amount -------
-#plot track length -- this grouped plot is not very informative
-ggplot(data = ghent.trajectory, aes(x = track_length, group = treatment, fill = treatment))+
-  geom_histogram(alpha=.4) +
-  labs(title = "Grouped trajectory data - Ghent")
-ggplot(data = essen.trajectory, aes(x = track_length, group = treatment, fill = treatment))+
-  geom_histogram(alpha=.4) +
-  labs(title = "Grouped trajectory data - Essen")
+# ----------- Exploration -------
+# Exploration of directness feature 
+# Ghent - average directness per treatment (patients grouped)
+ggplot(data=ghent.trajectory, aes(x=average_directness, group=treatment, fill=treatment)) +
+  geom_density(aes(y = ..count..), alpha=.4) +
+  labs(title = "Grouped trajectory data - Ghent", y = "#of tracks")
 
-# Track amounts per unique patient - treatment combination
-trackamounts <- c()
-#Ghent
-for(patient in unique(ghent.trajectory$patient)){
-  for(treatment in unique(ghent.trajectory$treatment)){
-    count <- sum(ghent.trajectory[,7]== treatment & ghent.trajectory[,8]== patient)
-    trackamounts <- c(trackamounts, count)
-  }
-}
-matrix.trackamounts.Ghent <- matrix(trackamounts, nrow = 4, ncol = 4, dimnames = list(unique(ghent.trajectory$treatment),unique(ghent.trajectory$patient)))
-#Now visualize the matrices and compare vs track length
-meltmatrix.Ghent <- reshape2::melt(matrix.trackamounts.Ghent)
-ggplot(meltmatrix.Ghent, aes(x = Var2, y = Var1)) +
-  geom_raster(aes(fill=value)) +
-  scale_fill_gradient(low="grey90", high="red") +
-  labs(x="Patient", y="Treatment", title="Amount of unique tracks - Ghent") +
-  theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
-                     axis.text.y=element_text(size=9),
-                     plot.title=element_text(size=11))
-for (patient in unique(ghent.trajectory$patient)) {
-  tempSubset <- ghent.trajectory[which(ghent.trajectory[["patient"]] == patient), ]
-  tempSubset <- na.omit(tempSubset)
-  print(ggplot(tempSubset, aes(x = track_length, group = treatment, fill = treatment)) +
-          geom_histogram(alpha=.4) +
-          labs(title = paste("Trajectory data: patient ", patient," - Ghent")))
-}
-
-#Essen
-trackamounts <- c()
-for(patient in unique(essen.trajectory$patient)){
-  for(treatment in unique(essen.trajectory$treatment)){
-    count <- sum(essen.trajectory[,7]== treatment & essen.trajectory[,6]== patient)
-    trackamounts <- c(trackamounts, count)
-  }
-}
-matrix.trackamounts.Essen <- matrix(trackamounts, nrow = 4, ncol = 9, dimnames = list(unique(essen.trajectory$treatment),unique(essen.trajectory$patient)))
-#Now visualize the matrix
-meltmatrix.Essen <- reshape2::melt(matrix.trackamounts.Essen)
-# must re-restablish patient number as factor (else the interval between numbers is too large)
-meltmatrix.Essen$Var2 <- as.factor(meltmatrix.Essen$Var2)
-ggplot(meltmatrix.Essen, aes(x = Var2, y = Var1)) +
-  geom_raster(aes(fill=value)) +
-  scale_fill_gradient(low="grey90", high="red") +
-  labs(x="Patient", y="Treatment", title="Amount of unique tracks - Essen") +
-  theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
-                     axis.text.y=element_text(size=9),
-                     plot.title=element_text(size=11))
-#compare vs track length, separate plot per patient
-for (patient in unique(essen.trajectory$patient)) {
-  tempSubset <- essen.trajectory[which(essen.trajectory[["patient"]] == patient), ]
-  tempSubset <- na.omit(tempSubset)
-  print(ggplot(tempSubset, aes(x = track_length, group = treatment, fill = treatment)) +
-    geom_histogram(alpha=.4) +
-    labs(title = paste("Trajectory data: patient ", patient," - Essen")))
-}
-#limit x axis to 200
-for (patient in unique(essen.trajectory$patient)) {
-  tempSubset <- essen.trajectory[which(essen.trajectory[["patient"]] == patient), ]
-  tempSubset <- na.omit(tempSubset)
-  print(ggplot(tempSubset, aes(x = track_length, group = treatment, fill = treatment)) +
-          geom_histogram(alpha=.4) +
-          labs(title = paste("Trajectory data: patient ", patient," - Essen")) +
-          xlim(0, 200))
-}
+# mean speed vs average directness
+ggplot(data = ghent.trajectory, aes(x=mean_speed, y=average_directness, group=treatment, color=treatment)) +
+  geom_point(size = 0.9)+
+  labs(title = "Speed vs directionality - Ghent")
+  
 # Correlation matrix of all features, with coefficient
 ggstatsplot::ggcorrmat(
   data = ghent.trajectory,
-
   p.adjust.method = "holm", # p-value adjustment method for multiple comparisons
   cor.vars = c(mean_speed:track_length), # a range of variables can be selected
   cor.vars.names = c(
@@ -106,26 +44,14 @@ ggstatsplot::ggcorrmat(
 )
 
 
-
-# ------- Exploration of directness feature -----
-# Ghent - average directness per treatment (patients grouped)
-ggplot(data=ghent.trajectory, aes(x=average_directness, group=treatment, fill=treatment)) +
-  geom_density(aes(y = ..count..), alpha=.4) +
-  labs(title = "Grouped trajectory data - Ghent", y = "#of tracks")
-
-# mean speed vs average directness
-ggplot(data = ghent.trajectory, aes(x=mean_speed, y=average_directness, group=treatment, color=treatment)) +
-  geom_point(size = 0.9)+
-  labs(title = "Speed vs directionality - Ghent")
-
-
 # -------- TRAJECTORY-CENTRIC ANALYSES ------
 
-# -------  TYPICAL ROUTINE ANALYSIS: grouped data -------
+# -------  TYPICAL ROUTINE ANALYSIS: 2 sets of data, patients grouped together -------
 # ------- Ghent ------
 # Mean speed: investigation of normality
-# Ghent data, pbs & flmp, all patients grouped. Density followed by Shapiro Wilk test
+# Ghent data, pbs & fmlp treatments, all patients grouped. Density followed by Shapiro Wilk test
 # p < 0.05 indicates data does NOT follow a normal distribution
+
 ggplot(data=ghent.trajectory, aes(x=mean_speed, group=treatment, fill=treatment)) +
   geom_density(aes(y = ..count..), alpha=.4) +
   labs(title = "Grouped trajectory data - Ghent", y = "#of tracks")
@@ -138,6 +64,7 @@ plot(density(subGhent.pbsfmlp[which(subGhent.pbsfmlp[["treatment"]] == "pbs"), "
 shapiro.test(subGhent.pbsfmlp[which(subGhent.pbsfmlp[["treatment"]] == "pbs"), "mean_speed"])
 plot(density(subGhent.pbsfmlp[which(subGhent.pbsfmlp[["treatment"]] == "fmlp"), "mean_speed"]), main = "Ghent FMLP mean speed density distribution")
 shapiro.test(subGhent.pbsfmlp[which(subGhent.pbsfmlp[["treatment"]] == "fmlp"), "mean_speed"])
+
 #QQ-plots
 car::qqPlot(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "pbs"), "mean_speed"], ylab= "mean_speed")
 title("QQplot Ghent PBS", adj = 0)
