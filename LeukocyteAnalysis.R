@@ -66,6 +66,7 @@ plot(density(subGhent.pbsfmlp[which(subGhent.pbsfmlp[["treatment"]] == "fmlp"), 
 shapiro.test(subGhent.pbsfmlp[which(subGhent.pbsfmlp[["treatment"]] == "fmlp"), "mean_speed"])
 
 #QQ-plots
+# we use the car package because it gives us interval lines
 car::qqPlot(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "pbs"), "mean_speed"], ylab= "mean_speed")
 title("QQplot Ghent PBS", adj = 0)
 car::qqPlot(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "fmlp"), "mean_speed"], ylab= "mean_speed")
@@ -132,9 +133,9 @@ ggplot(data=traj.essen.pbs, aes(x = status, y=mean_speed, group=status, fill=sta
 
 # ------ Upgrade: test multiple moments of distribution----
 #---- Ghent ----
-#Ghent data, PBS vs CXCL , patients grouped.
+#Ghent data, PBS vs CXCL1 , patients grouped.
 boxplot(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "pbs"), "mean_speed"],ghent.trajectory[which(ghent.trajectory[["treatment"]] == "cxcl1"), "mean_speed"], main = "Ghent PBS-CXCL1 mean speed")
-#Density followed by Shapiro Wilk test
+#Density plot followed by Shapiro Wilk test
 # p < 0.05 indicates data does NOT follow a normal distribution
 ggplot(data=ghent.trajectory, aes(x=mean_speed, group=treatment, fill=treatment)) +
   geom_density(aes(y = ..count..),  alpha=.4) +
@@ -144,7 +145,6 @@ shapiro.test(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "pbs"), "
 plot(density(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "cxcl1"), "mean_speed"]), main = "Ghent CXCL-1 mean speed density distribution")
 shapiro.test(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "cxcl1"), "mean_speed"])
 # another normality check is plotting QQ-plot
-# we here use the car package because it gives us interval lines
 car::qqPlot(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "cxcl1"), "mean_speed"])
 
 # NOT normally distributed means non-parametric group comparison
@@ -179,6 +179,10 @@ for (i in 1:nreps) {
 }
 plot(density(skeww), main = "Permutations of skewness difference \n Ghent PBS-CXCL1")
 abline(v = skewdifference, col = "red")
+#from this table we can see 4223 permutations out of 5000 are smaller than the original skewness difference
+table(skeww < skewdifference)
+4223/5000  #0.8446 Not outside the 95th percentile, so no significant effect of cxcl1 vs pbs on mean speed skewness
+
 # Kurtosis, same method as skewness as there is no test available
 kurtPBS <- moments::kurtosis(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "pbs"), "mean_speed"])
 kurtCXCL1 <- moments::kurtosis(ghent.trajectory[which(ghent.trajectory[["treatment"]] == "cxcl1"), "mean_speed"])
@@ -196,6 +200,8 @@ for (i in 1:nreps) {
 }
 plot(density(permkurt), main = "Permutations of kurtosis difference \n Ghent PBS-CXCL1")
 abline(v = kurtdifference, col = "red")
+table(permkurt < kurtdifference)
+2471/5000 #0.4942
 
 #----- Essen----
 # Now test additional moments in Essen dataset: control vs mild MDS,
@@ -289,27 +295,55 @@ ggplot(data=traj.essen.pbs[which(traj.essen.pbs[["status"]] == "severe"),], aes(
   geom_rug(aes(x = mean_speed, y = 0), position = position_jitter(height = 0))+
   labs(title = "Essen severe patients", y = "# of tracks")
 
+# ---------- Probabilistic Index models --------
+#Ghent data, full complexity
+pimGhent_traj <- pim(mean_speed ~ treatment * patient + 1, data = ghent.trajectory)
+# without intercept
+pimGhent_traj2 <- pim(mean_speed ~ treatment * patient, data = ghent.trajectory)
+
+summary(pimGhent_traj)
+coef(pimGhent_traj)
+
+#Essen data
+# Unfortunately, using PIMs on very large datasets, such as our Essen set, quickly becomes a very computationally demanding task
+# Especially because of the three levels of hierarchy that are present and their interactions.
+# For more information on this subject and possible workarounds, we recommend https://github.com/HBossier/BigDataPIM
+# The dissertation associated with that repository can be found here: https://libstore.ugent.be/fulltxt/RUG01/002/376/287/RUG01-002376287_2017_0001_AC.pdf
+pimEssen <- pim(mean_speed ~ treatment * patient * status + 1, data = essen.trajectory) # vector too large 38.6Gb
+pimEssen <- pim(mean_speed ~ treatment * status + patient + 1, data = essen.trajectory) # vector 7.1 Gb is also too large
+pimEssen <- pim(mean_speed ~ treatment + status + patient + 1, data = essen.trajectory)
+summary(pimEssen)
+coef(pimEssen)
 
 # ------- GLMM Ghent ----
 # Linear mixed (effect) model: model effect of treatment on mean speed for each individual patient
 lmm.Ghent.allTreat <- lme4::lmer(mean_speed ~ treatment + (treatment | patient), ghent.trajectory)
 summary(lmm.Ghent.allTreat)
-## compare resuduals between lmm and normal linear model
-sqrt(sum(residuals(lm(mean_speed~treatment * patient,data=ghent.trajectory))^2)/(dim(ghent.trajectory)[1]-2))
-sqrt(sum(resid(lmm.Ghent.allTreat)^2)/(dim(ghent.trajectory)[1]-2))
-# compare models using AIC
-fit1 <- lm(mean_speed~treatment * patient,data=ghent.trajectory)
-fit2 <- lmm.Ghent.allTreat
 # (fit3 =  simpler mixed model with only variable intercept, not slope)
 fit3 <- lme4::lmer(mean_speed ~ treatment + (1 | patient), ghent.trajectory)
-# REML models will be automatically recalculated onder ML (max likelihood) when using this anova
-anova(fit2, fit1)
+## compare resuduals between a normal linear model and the mixed model
+linMod <-  lm(mean_speed~treatment * patient,data=ghent.trajectory)
+sqrt(sum(residuals(linMod)^2)/(dim(ghent.trajectory)[1]-2))
+sqrt(sum(resid(lmm.Ghent.allTreat)^2)/(dim(ghent.trajectory)[1]-2))
+
+# Standard Fitted vs Residuals plot
+plot(lmm.Ghent.allTreat, type = c("p", "smooth"))
+# Scale-location (based on raw residuals instead of standardized)
+plot(lmm.Ghent.allTreat, sqrt(abs(resid(.))) ~ fitted(.), type = c("p", "smooth"))
+# QQ plot (also based on raw residuals)
+lattice::qqmath(lmm.Ghent.allTreat, id = 0.05)
+
+# compare these same models using AIC
+# The standard REML models will automatically be recalculated onder ML (max likelihood) when using this anova
+anova(lmm.Ghent.allTreat, linMod)
 # plot prediction of mixed effect models using sjPlot package
 sjPlot::plot_model(lmm.Ghent.allTreat,  type = "pred", title = "Predicted mean speed: random treatment|patient")
 sjPlot::plot_model(fit1, type = "pred", title = "Predicted mean speed with random patient effect")
 # most intervals seem to shrink when removing random treatment|patient interaction, but cxcl1 prediction interval widens
 
 # GENERALIZED linear mixed effects model: less assumptions about data
+# Try other family such as Gamma or inverse.Gaussian
+# Does not seem to converge with this dataset
 glmm.Ghent.allTreat <- lme4::glmer(mean_speed ~ treatment + (treatment | patient), ghent.trajectory, family = Gamma(link = "identity"))
 sjPlot::plot_model(glmm.Ghent.allTreat,  type = "pred", title = "Predicted mean speed: random treatment|patient")
 summary(glmm.Ghent.allTreat)
@@ -325,18 +359,28 @@ summary(lmm.Essen.allTreat)
 # although status:treatment interactions are then present in both fixed and random effect results
 lmm.Essen.allTreat.interaction <- lme4::lmer(mean_speed ~ status * treatment + (treatment*status|patient), data = essen.trajectory)
 
+# Simple linear models for both pbs and full dataset
+linMod <-  lm(mean_speed~status * patient,data=traj.essen.pbs)
+sqrt(sum(resid(linMod)^2)/(dim(traj.essen.pbs)[1]-2))
+linMod2 <- lm(mean_speed~status * patient * treatment,data= essen.trajectory)
+sqrt(sum(resid(linMod2)^2)/(dim(essen.trajectory)[1]-2))
 
 # Compare residuals of simple and complex model
 sqrt(sum(resid(lmm.Essen.pbs)^2)/(dim(traj.essen.pbs)[1]-2))
 sqrt(sum(resid(lmm.Essen.allTreat)^2)/(dim(essen.trajectory)[1]-2))
-# lower residuals in the simpler model makes sense: smaller dataframe with a lot less dimensionality
+# Mixed models only: lower residuals in the simpler pbs-only model makes sense: smaller dataframe with a lot less dimensionality
+# Residuals of normal linear models with mixed models on both datasets are comparable
+
 # Standard Fitted vs Residuals plot
 plot(lmm.Essen.allTreat, type = c("p", "smooth"))
 # Scale-location (based on raw residuals instead of standardized)
 plot(lmm.Essen.allTreat, sqrt(abs(resid(.))) ~ fitted(.), type = c("p", "smooth"))
 # QQ plot (also based on raw residuals)
 lattice::qqmath(lmm.Essen.allTreat, id = 0.05)
-# anova does not make sense with these two models, as they were fit on different size datasets
+# ANOVA does not make sense with these two mixed models, as they were fit on different size datasets
+# ANOVA with simple linear model and mixel model
+anova(lmm.Essen.pbs, linMod)
+anova(lmm.Essen.allTreat, linMod2)
 
 # Some prediction plots using sjPlot package
 sjPlot::plot_model(lmm.Essen.pbs,  type = "pred", title = "Predicted mean speed: random status|patient")
@@ -349,7 +393,7 @@ sjPlot::tab_model(lmm.Essen.allTreat)
 # a combination table can also be made but is quite bulky
 sjPlot::tab_model(lmm.Essen.pbs, lmm.Essen.allTreat)
 
-# Try out inverse gaussian/gamma distribution (family = inverse.gaussian / Gamma), gamma makes more sense for this dataset?
+# Try out inverse gaussian/gamma distribution (family = inverse.gaussian / Gamma), gamma makes more sense for this dataset
 # In the dataset, there is a non-positive value (a zero) somewhere
 # thus, create dataset copies that do not have this zero and perform glmm with these
 traj.essen.pbs.nonzero <- dplyr::filter(traj.essen.pbs, mean_speed > 0)
@@ -372,22 +416,3 @@ summary(glmm.Essen.allTreat)
 sjPlot::plot_model(glmm.Essen.allTreat,  type = "pred",terms = c("treatment", "status"), title = "Predicted mean speed: random treatment|patient")
 # Conclusion: Gamma-based seems better than inverse gaussian. But overall the result is very similar to standard gaussian modelling.
 
-
-# ---------- Probabilistic Index models --------
-#Ghent data, full complexity
-pimGhent_traj <- pim(mean_speed ~ treatment * patient + 1, data = ghent.trajectory)
-# without intercept
-pimGhent_traj <- pim(mean_speed ~ treatment * patient, data = ghent.trajectory)
-
-summary(pimGhent_traj)
-
-#Essen data
-# Unfortunately, using PIMs on very large datasets, such as our Essen set, quickly becomes a very computationally demanding task
-# Especially because of the three levels of hierarchy that are present and their interactions.
-# For more information on this subject and possible workarounds, we recommend https://github.com/HBossier/BigDataPIM
-# The dissertation associated with that repository can be found here: https://libstore.ugent.be/fulltxt/RUG01/002/376/287/RUG01-002376287_2017_0001_AC.pdf
-pimEssen <- pim(mean_speed ~ treatment * patient * status + 1, data = essen.trajectory) # vector too large 38.6Gb
-pimEssen <- pim(mean_speed ~ treatment * status + patient + 1, data = essen.trajectory) # vector 7.1 gig also impossible
-pimEssen <- pim(mean_speed ~ treatment + status + patient + 1, data = essen.trajectory)
-summary(pimEssen)
-coef(pimEssen)
