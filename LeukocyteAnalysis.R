@@ -1,4 +1,4 @@
-# Packages used in this file: reshape2, coin, FSA, car, moments, data.table, lme4, sjPlot, ggplot2, pim
+# Packages used in this file: reshape2, coin, FSA, car, moments, data.table, lme4, sjPlot, ggplot2, pim, locfit
 # Please install these using the install.packages("") command
 # Some libraries give problems when using double colon, so load them here instead
 library(ggplot2)
@@ -310,7 +310,10 @@ pimconf <- confint(pimGhent_traj)
 pimconf <- as.data.frame(pimconf)
 data.table::setDT(pimconf, keep.rownames = TRUE)[]
 colnames(pimconf) <- c("Parameter", "Min", "Max")
-pimconf$Probability <- coef(pimGhent_traj)
+# Transform original logit values back to "normal" 0-1 probabilities
+pimconf$Probability <- locfit::expit(coef(pimGhent_traj))
+pimconf$Min<-locfit::expit(pimconf$Min)
+pimconf$Max<-locfit::expit(pimconf$Max)
 # Plot intervals with rotated x axes values
 ggplot(pimconf,aes(Parameter,y=Probability,ymin=Min,ymax=Max,color="red")) +
   geom_pointrange() +
