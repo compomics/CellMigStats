@@ -1,4 +1,4 @@
-# Packages used in this file: reshape2, coin, FSA, car, moments, lme4, sjPlot, ggplot2, pim
+# Packages used in this file: reshape2, coin, FSA, car, moments, data.table, lme4, sjPlot, ggplot2, pim
 # Please install these using the install.packages("") command
 # Some libraries give problems when using double colon, so load them here instead
 library(ggplot2)
@@ -303,6 +303,18 @@ pimGhent_traj2 <- pim(mean_speed ~ treatment * patient, data = ghent.trajectory)
 
 summary(pimGhent_traj)
 coef(pimGhent_traj)
+
+#Plot probabilities and their confidence intervals
+#create prob/confint dataframe with logical column names
+pimconf <- confint(pimGhent_traj)
+pimconf <- as.data.frame(pimconf)
+data.table::setDT(pimconf, keep.rownames = TRUE)[]
+colnames(pimconf) <- c("Parameter", "Min", "Max")
+pimconf$Probability <- coef(pimGhent_traj)
+# Plot intervals with rotated x axes values
+ggplot(pimconf,aes(Parameter,y=Probability,ymin=Min,ymax=Max,color="red")) +
+  geom_pointrange() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 #Essen data
 # Unfortunately, using PIMs on very large datasets, such as our Essen set, quickly becomes a very computationally demanding task
