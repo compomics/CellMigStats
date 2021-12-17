@@ -317,7 +317,8 @@ pimconf$Max<-locfit::expit(pimconf$Max)
 # Plot intervals with rotated x axes values
 ggplot(pimconf,aes(Parameter,y=Probability,ymin=Min,ymax=Max,color="red")) +
   geom_pointrange() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  geom_hline(yintercept = 0.5, linetype = 2)
 
 #Essen data
 # Unfortunately, using PIMs on very large datasets, such as our Essen set, quickly becomes a very computationally demanding task
